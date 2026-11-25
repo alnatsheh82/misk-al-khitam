@@ -1,0 +1,7 @@
+أنشطتي/*.misk.json
+*.misk-backup.json
+*.misk-pack.json
+شعبي.misk-classes.json
+ملفي.misk-profile.json
+.DS_Store
+Thumbs.db
