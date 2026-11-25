@@ -1126,3 +1126,8 @@ main>*{animation:pageIn .32s cubic-bezier(.2,.8,.2,1) backwards}
 .st-sum{font-weight:800}.st-sum.ok{color:var(--ok)}.st-sum.no{color:var(--bad)}
 button.score-pill{font-family:inherit;cursor:pointer;border:0}
 button.score-pill:not(.turn):hover{outline:2px dashed var(--primary);outline-offset:2px}
+
+/* ---------- التحديث ---------- */
+.up-bar { background: color-mix(in srgb, #16a34a 14%, var(--card)); border-color: #16a34a; }
+.up-bar strong { color: #15803d; }
+.up-notes { margin: 0; padding-inline-start: 20px; display: grid; gap: 6px; }

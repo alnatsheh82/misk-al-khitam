@@ -1,7 +1,7 @@
 /* مِسك الختام — الشاشات: القائمة الجانبية، أنشطتي، اختيار القالب، المحرّر، العرض، الإعدادات */
 (function () {
   var MK = window.MK, h = MK.h, ar = MK.toArabicDigits;
-  var VERSION = '2.3';
+  var VERSION = '2.4';
   var RIGHTS = '© 2026 مِسك الختام — فكرة وتصميم: أ. محمد سعيد النتشة، مدرسة قطر التقنية الثانوية للبنين. جميع الحقوق محفوظة.';
   var GRADES = ['الأول', 'الثاني', 'الثالث', 'الرابع', 'الخامس', 'السادس', 'السابع', 'الثامن', 'التاسع', 'العاشر', 'الحادي عشر', 'الثاني عشر'].map(function (g) { return 'الصف ' + g; });
   var TERMS = ['الأول', 'الثاني'];
@@ -66,6 +66,7 @@
       h('div', { class: 'txt' }, h('h1', null, 'مِسك الختام'), h('p', null, MK.DESC),
         (P.school || P.teacher) ? h('div', { class: 'home-school' }, P.logo ? h('img', { src: P.logo, alt: '' }) : null, h('span', null, [P.teacher, P.school].filter(Boolean).join(' — '))) : null)));
     var note = folderLine(); if (note) m.appendChild(note);
+    var upSlot = h('div'); m.appendChild(upSlot); MK.updater.auto(upSlot);
     var bkSlot = h('div'); m.appendChild(bkSlot);
     var quick = [['new', 'plus', 'نشاط جديد', 'سبعة وعشرون قالبًا'], ['ww', 'upload', 'من Wordwall', 'الصق نص نشاطك فيُنشأ هنا'], ['acts', 'folder', 'أنشطتي', 'كل أنشطتك مرتبة بالدروس'], ['profile', 'users', 'ملفي وشُعَبي', 'بياناتك والطلاب'], ['samples', 'copy', 'أمثلة جاهزة', 'جرّب قبل أن تصنع']];
     m.appendChild(h('div', { class: 'quick' }, quick.map(function (q) {
@@ -78,6 +79,7 @@
     MK.store.list().then(function (l) { activities = l; draw(); }).catch(function () { activities = []; draw(); });
     function draw() {
       var bkb = MK.backupBanner && MK.backupBanner(); if (bkb) bkSlot.appendChild(bkb);
+      var lg = legacyLine(); if (lg) bkSlot.appendChild(lg);
       var lessons = {}; activities.forEach(function (a) { lessons[(a.grade || '') + '|' + (a.term || '') + '|' + a.title] = 1; });
       [[activities.length, 'نشاطًا'], [Object.keys(lessons).length, 'درسًا'], [MK.classes.classes.length, 'شعبة']].forEach(function (x) {
         stats.appendChild(h('div', { class: 'stat' }, h('b', null, ar(x[0])), h('span', null, x[1])));
@@ -214,14 +216,39 @@
       h('span', null, 'اسمح للأداة بفتح مجلد «', h('strong', null, S.folderName), '» لعرض أنشطتك.'), h('span', { class: 'spacer' }),
       h('button', { type: 'button', class: 'btn small', onclick: function () { S.reconnect().then(MK.loadClasses).then(showActs).catch(function () { MK.toast('لم يُمنح الإذن'); }); } }, 'اسمح بالوصول'));
     if (!S.supported) return h('div', { class: 'notice' }, MK.icon('info'), 'متصفحك لا يدعم الحفظ في مجلد، فتُحفظ الأنشطة داخل المتصفح.');
-    return h('div', { class: 'notice' }, MK.icon('folder'), h('span', null, 'لم يُربط مجلد «أنشطتي» بعد، فتُحفظ الأنشطة داخل المتصفح.'), h('span', { class: 'spacer' }),
+    return h('div', { class: 'notice' }, MK.icon('folder'), h('span', null, 'لم يُربط مجلد «مسك الختام» بعد، فتُحفظ الأنشطة داخل المتصفح.'), h('span', { class: 'spacer' }),
       h('button', { type: 'button', class: 'btn small', onclick: pickFolder }, 'اختر المجلد'));
   }
+  // بيانات في مجلد قديم: انقلها إلى «مسك الختام/البيانات» ضمن أدوات المعلمين
+  function legacyLine() {
+    var S = MK.store;
+    if (!S.isLegacy || !S.isLegacy()) return null;
+    try { if (localStorage.getItem('misk.legacy.later')) return null; } catch (e) { }
+    var bar = h('div', { class: 'notice' }, MK.icon('folder'),
+      h('span', null, 'أنشطتك في مجلد «', h('strong', null, S.folderName), '». انقلها إلى مجلد «البيانات» داخل «أدوات المعلمين ← مسك الختام» ليكون كل شيء في مكانه.'),
+      h('span', { class: 'spacer' }),
+      h('button', { type: 'button', class: 'btn small', onclick: moveFamily }, 'انقلها الآن'),
+      h('button', { type: 'button', class: 'btn small ghost', onclick: function () { try { localStorage.setItem('misk.legacy.later', '1'); } catch (e) { } bar.remove(); } }, 'لاحقًا'));
+    return bar;
+  }
+  function moveFamily() {
+    MK.store.moveToFamily().then(function () {
+      MK.toast('نُسخت أنشطتك إلى مجلد «البيانات»، وبقي المجلد القديم كما هو');
+      MK.loadClasses().then(goHome, goHome);
+    }).catch(function (e) {
+      if (e && e.name === 'AbortError') return;
+      MK.toast(e && (e.name === 'NotFamily' || e.name === 'PickedProgram') ? 'اختر مجلد «مسك الختام» الذي فيه «البرنامج» و«البيانات»' : 'تعذّر النقل');
+    });
+  }
+  MK.moveFamily = moveFamily;
   function pickFolder() {
     MK.store.chooseFolder().then(function (n) {
       MK.toast(n ? 'رُبط المجلد ونُقل إليه ' + ar(n) + ' نشاط' : 'رُبط المجلد، وستُحفظ أنشطتك فيه');
       MK.loadClasses().then(goHome, goHome);
-    }).catch(function (e) { if (e && e.name !== 'AbortError') MK.toast('تعذّر ربط المجلد'); });
+    }).catch(function (e) {
+      if (e && e.name === 'PickedProgram') MK.toast('اختر مجلد «مسك الختام» نفسه، لا مجلد «البرنامج» الذي داخله');
+      else if (e && e.name !== 'AbortError') MK.toast('تعذّر ربط المجلد');
+    });
   }
 
   function actCard(a, isSample) {
@@ -751,8 +778,10 @@
     if (!S.supported) folderBox.appendChild(h('p', { class: 'hint' }, 'هذا المتصفح لا يدعم الحفظ في مجلد. استخدم كروم أو إيدج.'));
     else {
       folderBox.appendChild(h('p', null, S.mode === 'local' ? 'الأنشطة محفوظة داخل المتصفح.' : 'المجلد الحالي: ', S.folderName ? h('strong', null, S.folderName) : null));
+      folderBox.appendChild(h('p', { class: 'hint' }, 'المكان المقترح: المستندات ← أدوات المعلمين ← مسك الختام. تُحفظ الأنشطة في «البيانات»، وملفات الأداة في «البرنامج».'));
       folderBox.appendChild(h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
-        h('button', { type: 'button', class: 'btn small', onclick: function () { close(); pickFolder(); } }, MK.icon('folder'), S.mode === 'local' ? 'اختر مجلد أنشطتي' : 'غيّر المجلد'),
+        h('button', { type: 'button', class: 'btn small', onclick: function () { close(); pickFolder(); } }, MK.icon('folder'), S.mode === 'local' ? 'اختر مجلد «مسك الختام»' : 'غيّر المجلد'),
+        S.isLegacy() ? h('button', { type: 'button', class: 'btn small soft', onclick: function () { close(); moveFamily(); } }, 'انقلها إلى «البيانات»') : null,
         S.mode !== 'local' ? h('button', { type: 'button', class: 'btn small ghost', onclick: function () { S.forgetFolder().then(MK.loadClasses).then(function () { close(); MK.toast('فُصل المجلد، والأنشطة فيه لم تُحذف'); goHome(); }); } }, 'افصل المجلد') : null));
     }
     var body = h('div', null,
@@ -763,6 +792,7 @@
       h('details', { class: 'fb-details' }, h('summary', null, MK.icon('star'), 'الوقت والدرجات وعبارات التهنئة'), MK.fbSettingsSection()),
       h('div', { class: 'field' }, h('label', null, 'مكان حفظ الأنشطة'), folderBox),
       h('div', { class: 'field' }, h('label', null, 'النسخ الاحتياطي'), MK.backupSection()),
+      h('div', { class: 'field' }, h('label', null, 'التحديثات'), MK.updater.section()),
       h('div', { class: 'field' }, h('label', null, 'فحص الأداة'),
         h('button', { type: 'button', class: 'btn small soft', style: { alignSelf: 'flex-start' }, onclick: function () { close(); setTimeout(MK.selfTest, 200); } }, MK.icon('check'), 'افحص كل القوالب الآن'),
         h('p', { class: 'hint' }, 'يشغّل كل القوالب والحفظ في ثوانٍ، ويفيد عند تجربة الأداة على جهاز جديد.')),

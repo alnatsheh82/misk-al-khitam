@@ -50,10 +50,59 @@
     }).catch(function () { S.mode = 'local'; return S.mode; });
   };
 
+  // ترتيب «أدوات المعلمين»: أدوات المعلمين / مسك الختام / البرنامج + البيانات
+  var TOOL = 'مسك الختام', DATA = 'البيانات', PROG = 'البرنامج';
+  function sub(d, name, create) { return d.getDirectoryHandle(name, { create: !!create }).catch(function () { return null; }); }
+  // من أي مجلد يختاره المعلم نصل إلى مجلد البيانات (ومجلد البرنامج إن وُجد)
+  S.resolveFamily = function (hd) {
+    var out = { data: hd, prog: null };
+    if (hd.name === DATA) return Promise.resolve(out);
+    if (hd.name === PROG) return Promise.reject({ name: 'PickedProgram' });
+    return sub(hd, TOOL).then(function (t) { return t || hd; }).then(function (root) {
+      return sub(root, PROG).then(function (pg) {
+        if (!pg && root === hd && hd.name !== TOOL) return out; // مجلد عادي: يُستعمل كما هو
+        out.prog = pg;
+        return sub(root, DATA, true).then(function (dd) { out.data = dd || hd; return out; });
+      });
+    });
+  };
   S.chooseFolder = function () {
-    return window.showDirectoryPicker({ id: 'misk-activities', mode: 'readwrite' }).then(function (hd) {
+    return window.showDirectoryPicker({ id: 'misk-activities', mode: 'readwrite' }).then(S.resolveFamily).then(function (r) {
+      var hd = r.data;
       dirHandle = hd; S.folderName = hd.name; S.mode = 'folder';
-      return idbSet('dir', hd).then(function () { return S.migrateLocal(); });
+      return idbSet('dir', hd).then(function () { if (r.prog) return idbSet('prog', r.prog); })
+        .then(function () { return S.migrateLocal(); });
+    });
+  };
+  S.progHandle = function () { return idbGet('prog').catch(function () { return null; }); };
+  S.setProgHandle = function (hd) { return idbSet('prog', hd); };
+  // هل البيانات في مجلد قديم (أنشطتي) لا في «مسك الختام/البيانات»؟
+  S.isLegacy = function () { return S.mode === 'folder' && S.folderName !== DATA; };
+  // نقل البيانات إلى مجلد «البيانات» في ترتيب العائلة (نسخ، ولا يُحذف القديم)
+  function copyDir(from, to) {
+    var it = from.values();
+    function step() {
+      return it.next().then(function (r) {
+        if (r.done) return;
+        var e = r.value;
+        if (e.kind === 'directory') return to.getDirectoryHandle(e.name, { create: true }).then(function (d) { return copyDir(e, d); }).then(step);
+        return e.getFile().then(function (f) {
+          return to.getFileHandle(e.name, { create: true }).then(function (fh) { return fh.createWritable(); })
+            .then(function (w) { return w.write(f).then(function () { return w.close(); }); });
+        }).then(step);
+      });
+    }
+    return step();
+  }
+  S.moveToFamily = function () {
+    var src = dirHandle;
+    return window.showDirectoryPicker({ id: 'misk-family', mode: 'readwrite' }).then(S.resolveFamily).then(function (r) {
+      if (r.data.name !== DATA) throw { name: 'NotFamily' };
+      return (src && src.name !== DATA ? copyDir(src, r.data) : Promise.resolve()).then(function () {
+        dirHandle = r.data; S.folderName = DATA; S.mode = 'folder';
+        return idbSet('dir', r.data).then(function () { if (r.prog) return idbSet('prog', r.prog); })
+          .then(function () { return S.migrateLocal(); });
+      });
     });
   };
   S.reconnect = function () {
